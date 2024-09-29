@@ -58,7 +58,7 @@ also, for storing the result,
 static uint8_t FsmUtilGetBitNumber(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, uint8_t * aReturnBitNumber_u8);
 
 /*************************************************************************
-  API FUNCTION DEFINITION
+  API FUNCTION DEFINITION OF FSM UTILITY FUNCTIONS
 *************************************************************************/
 
 uint8_t fsmUtilCreateFsm(uint8_t aNumberOfStates_u8, uint64_t aPermissibleStateTransition_u64[])
@@ -93,14 +93,30 @@ uint8_t fsmUtilCreateFsm(uint8_t aNumberOfStates_u8, uint64_t aPermissibleStateT
   return lReturnStatus_u8;
 }
 
-uint8_t fsmUtilSetStateFunction(uint8_t aState_u8, void (* aFsmStateFunction)(void))
+uint8_t fsmUtilSetStateFunction(uint8_t aStateNum_u8, void (* aFsmStateFunction)(void))
 {
   uint8_t lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE;
-  if(aState_u8 < Fsm.numOfStates_u8) /* a valid state will always be within the limit in which the FSM was created. */
+  if(aStateNum_u8 < Fsm.numOfStates_u8) /* a valid state will always be within the limit in which the FSM was created. */
   {
-    Fsm.stateFunction_u8[aState_u8] = aFsmStateFunction; /* set the state function */
+    Fsm.stateFunction_u8[aStateNum_u8] = aFsmStateFunction; /* set the state function */
+    lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_SUCCESS;         /* indicate successful operation */
   }
   else /* if the state is invalid then nothing needs to be done and error needs to be returned */
+  {
+    /* do nothing and let lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE */
+  }
+  return lReturnStatus_u8;
+}
+
+uint8_t fsmUtilRunStateFunction(uint8_t aStateNum_u8)
+{
+  uint8_t lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE;
+  if(aStateNum_u8 < Fsm.numOfStates_u8) /* a Valid state always lies within the limit with which the FSM was initialized. */
+  {
+    (*Fsm.stateFunction_u8[aStateNum_u8])(); /* Execute the State function of a valid State of the FSM */
+    lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_SUCCESS;
+  }
+  else /* invalid State indicates Failure of the operation */
   {
     /* do nothing and let lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE */
   }
@@ -115,19 +131,40 @@ uint8_t fsmUtilSetStateTransitionEvaluatorFunction(uint8_t aFromStateNum_u8, uin
   
   if(
     /* valid state pairs are those that are within the initialized limits ;
-    functionality can be provided only if variable address is provided */
+    functionality can be provided only if function address is provided */
     (aFromStateNum_u8 < Fsm.numOfStates_u8) && (aToStateNum_u8 < Fsm.numOfStates_u8) && (aFromToStateEvaluatorFn != NULL) &&
     /* get the position, in the stateTransitionEvaluator_u8 array, for setting the required Function */
     (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)
     )
   {
-    lPosition_u8 = (NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
+    lPosition_u8 = (MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
     Fsm.stateTransitionEvaluator_u8[lPosition_u8] = aFromToStateEvaluatorFn;
     lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_SUCCESS;
   }
   else
   {
     /* Function will not work when invalid state pair and NULL pointer address is provided */
+    /* do nothing and let lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE */
+  }
+  return lReturnStatus_u8;
+}
+
+uint8_t fsmUtilRunStateTransitionEvaluatorFunction(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8)
+{
+  uint8_t lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE;
+  uint8_t lBitNumber_u8 = 0U;
+  uint8_t lPosition_u8 = 0U;
+  if(
+    (aFromStateNum_u8 < Fsm.numOfStates_u8) && (aToStateNum_u8 < Fsm.numOfStates_u8) &&
+    (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)
+    ) /* a Valid state always lies within the limit with which the FSM was initialized. */
+  {
+    lPosition_u8 = (MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
+    (*Fsm.stateTransitionEvaluator_u8[lPosition_u8])(); /* Execute the State function of a valid State of the FSM */
+    lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_SUCCESS;
+  }
+  else /* invalid State indicates Failure of the operation */
+  {
     /* do nothing and let lReturnStatus_u8 = FSM_UTIL_RETURNTYPE_FAILURE */
   }
   return lReturnStatus_u8;
@@ -146,7 +183,7 @@ uint8_t fsmUtilSetStateTransitionPermission(uint8_t aFromStateNum_u8, uint8_t aT
     (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)  /* get the position, in the stateTransitionEvaluator_u8 array, for setting the required Function */
     )
   {
-    lPosition_u8 = (NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
+    lPosition_u8 = (MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
     lArrPosition_u8 = ((lPosition_u8/64U) - 1U);                      /* 64 because the structure array is of type uint64_t; (-1) for scaling correctly */
     lBitPosition_u8 = lPosition_u8%64U;
     
@@ -190,7 +227,7 @@ uint8_t fsmUtilGetStateTransitionPermission(uint8_t aFromStateNum_u8, uint8_t aT
     (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)
     )
   {
-    lPosition_u8 = (NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
+    lPosition_u8 = (MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
     /* 64 because the structure array is of type uint64_t; (-1) for scaling correctly */
     lArrPosition_u8 = ((lPosition_u8/64U) - 1U);
     lBitPosition_u8 = lPosition_u8%64U;
@@ -222,7 +259,7 @@ uint8_t fsmUtilSetStateEvaluatorReturnStatus(uint8_t aFromStateNum_u8, uint8_t a
     (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)
     )
   {
-    lPosition_u8 = (NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
+    lPosition_u8 = (MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8;
     /* 64 because the structure array is of type uint64_t; (-1) for scaling correctly */
     lArrPosition_u8 = ((lPosition_u8/64U) - 1U);
     lBitPosition_u8 = lPosition_u8%64U;
@@ -267,7 +304,7 @@ uint8_t fsmUtilGetStateEvaluatorReturnStatus(uint8_t aFromStateNum_u8, uint8_t a
     (FsmUtilGetBitNumber(aFromStateNum_u8, aToStateNum_u8, &lBitNumber_u8) == FSM_UTIL_RETURNTYPE_SUCCESS)
     )
   {
-    lPosition_u8 = ((NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8)*NUM_BITS_PER_STATE;
+    lPosition_u8 = ((MAX_NUM_STATES - 1)*aFromStateNum_u8 + lBitNumber_u8)*NUM_BITS_PER_STATE;
     /* 64 because the structure array is of type uint64_t; (-1) for scaling correctly */
     lArrPosition_u8 = ((lPosition_u8/64U) - 1U);
     lBitPosition_u8 = lPosition_u8%64U;
@@ -318,19 +355,24 @@ void fsmUtilFullResetFsm(void)
   void FsmUtilInitFsmStruct(void); /* Full reset is equivalent to reintialization */
 }
 
+/*************************************************************************
+  API FUNCTION DEFINITIONS FOR FSM EXECUTION FUNCTIONS
+*************************************************************************/
 
 uint8_t fsmUtilUpdateFsm(void)
 {
+  uint8_t lCurrentState_u8 = 0U;
   uint8_t lFromStateIterator_u8 = 0U;
   uint8_t lToStateIterator_u8 = 0U;
   uint8_t lMaxNumberOfStates_u8 = 0U;
   uint8_t lStatePermission_u8 = 0U;
   uint8_t lEvaluatorReturnStatus_u8 = 0U;
   if(
+    (fsmUtilityGetCurrentFsmState_u8(&lCurrentState_u8) == FSM_UTIL_RETURNTYPE_SUCCESS) &&    /* get the current state */
     (fsmUtilityGetNumberOfStates_u8(&lMaxNumberOfStates_u8) ==  FSM_UTIL_RETURNTYPE_SUCCESS) /* get max number of states available in the FSM */
     )
   {
-    for(lFromStateIterator_u8 = 0; lFromStateIterator_u8 < lMaxNumberOfStates_u8; lFromStateIterator_u8++)
+    for(lFromStateIterator_u8 = 0; ((lFromStateIterator_u8 < lMaxNumberOfStates_u8) && (lFromStateIterator_u8 != lCurrentState_u8)); lFromStateIterator_u8++)
     {
 
     }
@@ -347,8 +389,8 @@ static void FsmUtilInitFsmStruct(void)
   Fsm.currentFsmState_u8 = 0U;
   Fsm.numOfStates_u8 = 0U;
   memcpy(&Fsm.permissibleStateTransition_u64, &lZero_u8, NUM_STATE_TRANSITION_GRAPH);
-  memcpy(&Fsm.stateFunction_u8, &lZero_u8, NUM_STATE_TRANSITION);
-  memcpy(&Fsm.stateTransitionEvaluator_u8, &lZero_u8, NUM_STATE_TRANSITION);
+  memcpy(&Fsm.stateFunction_u8, &lZero_u8, MAX_NUM_STATE_TRANSITION);
+  memcpy(&Fsm.stateTransitionEvaluator_u8, &lZero_u8, MAX_NUM_STATE_TRANSITION);
   Fsm.isInitialized_u8 = 1U;
 }
 
