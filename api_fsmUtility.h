@@ -20,7 +20,7 @@ State transition evaluator functions :
 #define MAX_NUM_STATES  ((uint8_t)7U)
 
 /* Calculations required to define the Structure members based on User Input */
-#define MAX_NUM_STATE_TRANSITION          ((uint8_t)(MAX_NUM_STATES*(MAX_NUM_STATES - 1U)))
+#define MAX_NUM_STATE_TRANSITION          ((uint8_t)(MAX_NUM_STATES*MAX_NUM_STATES))
 #define MAX_NUM_STATE_TRANSITION_GRAPH    (((uint16_t)(MAX_NUM_STATE_TRANSITION)/64)+1)
 #define NUM_BITS_PER_STATE            ((uint8_t)2U)
 
@@ -47,13 +47,14 @@ State transition evaluator functions :
 #define FSM_UTIL_RETURNTYPE_FAILURE  ((uint8_t)0xFEU)
 
 
-typedef struct
+typedef enum
 {
-  uint8_t fsmStateNum_u8;
+  E_FSM_MODE_INITIALIZATION_PENDING,
+  E_FSM_MODE_OPERATION_RUNNING,
+  E_FSM_MODE_OPERATION_DISABLED,
 
-  uint8_t fsmStateTransitionPriorityList_u8[MAX_NUM_STATES*MAX_NUM_STATES];
-};
-
+  E_MAX_FSM_MODE
+}e_fsmModeType;
 
 
 /*
@@ -86,7 +87,7 @@ typedef struct
 /*
 - the state evaluator function updates the bit respective to their from/to state pair (as per the permissible state transition graph)
 */
-  uint64_t stateEvaluatorReturnStatus_u64[(MAX_NUM_STATE_TRANSITION_GRAPH/2)];
+  uint64_t stateEvaluatorReturnStatus_u64[((MAX_NUM_STATE_TRANSITION_GRAPH/2)+1)];
 
 /*
 - array of function pointers that point to functions (void arguments, void return-type) to be executed when present in any particular state.
@@ -96,7 +97,7 @@ typedef struct
 /*
 - array of function pointers that point to functions (void arguments, void return-type) to be executed when state transition needs to be evaluated.
 */
-  void (*stateTransitionEvaluator_u8[MAX_NUM_STATE_TRANSITION])(void);
+  uint8_t (*stateTransitionEvaluator_u8[MAX_NUM_STATE_TRANSITION])(void);
 
 /*
 - flag for initialization the members of the structure for the first time.
@@ -111,6 +112,8 @@ typedef struct
 - equals 0, when FSM operation needs to be stopped.
 */
   uint8_t fsmKeepAlive_u8;
+
+  e_fsmModeType fsmMode_e;
 
 }s_fsmType;
 
@@ -129,15 +132,16 @@ Initializing the FSM.
 @output
 - Return type that indicating the success / failure of the API.
 - FSM structure variable initialized with the given data.
+
 */
-uint8_t fsmUtilCreateFsm(uint8_t aNumberOfStates_u8, uint64_t aPermissibleStateTransition_u64[]);
+uint8_t fsmUtilCreateFsm_u8(uint8_t aNumberOfStates_u8, uint64_t aPermissibleStateTransition_u64[]);
 
 /*
 @brief
 Setting the State function for that particular State of the FSM.
 
 @details
-- Executing its State function is the responsibility of each State function.
+- Executing the State function & all its State Evaluator function is the responsibility of each State of the FSM.
 - While the FSM is in that particular State, a valid State function is the responsibility of the State & is always executed (as scheduled).
 - Any user function, that consolidates all the necessary functions to be executed while that particular state persists, can be set in the state function.
 - The State function return type is not handled, hence not supported for this implementation.
@@ -151,7 +155,7 @@ Setting the State function for that particular State of the FSM.
 - The State function of that particular state in the FSM is set.
 
 */
-uint8_t fsmUtilSetStateFunction(uint8_t aStateNum_u8, void (* aFsmStateFunction)(void));
+uint8_t fsmUtilSetStateFunction_u8(uint8_t aStateNum_u8, void (* aFsmStateFunction)(void));
 
 /*
 @brief
@@ -169,61 +173,95 @@ The State whose State function needs to be executed.
 - Execution of the State function of the given State of the FSM.
 
 */
-uint8_t fsmUtilRunStateFunction(uint8_t aStateNum_u8);
+uint8_t fsmUtilRunStateFunction_u8(uint8_t aStateNum_u8);
 
 /*
 @brief
 Setting the State function for that particular State of the FSM.
 
 @details
-- Executing its State function is the responsibility of each State function.
-- While the FSM is in that particular State, a valid State function is the responsibility of the State & is always executed (as scheduled).
-- Any user function, that consolidates all the necessary functions to be executed while that particular state persists, can be set in the state function.
-- The State function return type is not handled, hence not supported for this implementation.
+- Executing the State function & all its State Evaluator function is the responsibility of each State of the FSM.
+- While the FSM is running, it is the responsibility of the State to evaluate & validate the transition from itself to any other State of the FSM.
+- Any user funtion, that consolidates all the necessary functions to be executed for evaluating transition from the current state to any other state, can be set in the State Evaluator function.
+- The State Evaluator function return value is set in the State Evaluator Return Status element in the FSM Structure and not passed after execution.
 
 @input
-- The State number whose State function needs to be set.
-- The address of the State function (the State function must accept void arguments and must have void return type).
+- The State of the FSM in which the FSM exists ; existing State.
+- The State of the FSM to which the transition needs to evaluated ; Destination State.
+- The address of the State Evaluator function (the State Evaluator function must accept void arguments and must have void return type).
 
 @output
 - Return type that indicating the success / failure of the API.
 - The State function of that particular state in the FSM is set.
 
 */
-uint8_t fsmUtilSetStateTransitionEvaluatorFunction(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, void (* aFromToStateEvaluatorFn)(void));
+uint8_t fsmUtilSetStateTransitionEvaluatorFunction_u8(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, void (* aFromToStateEvaluatorFn)(void));
 
 /*
 @brief
+Executes the State function of that particular State of the FSM.
 
 @details
+The scheduling the execution of the State function in the exising architecture is the responsibility of the developer inheriting this development.
+This function provides a simplified way of executing the state function.
 
 @input
+- The State of the FSM in which the FSM exists ; existing State.
+- The State of the FSM to which the transition needs to evaluated ; Destination State.
 
 @output
+- Return type that indicating the success / failure of the API.
+- Execution of the State Evaluator function from given Existing State to the Destination State of the FSM.
 
 */
-uint8_t fsmUtilRunStateTransitionEvaluatorFunction(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8);
+uint8_t fsmUtilRunStateTransitionEvaluatorFunction_u8(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8);
 
 /*
 @brief
+Sets the required value to the necessary bit in the bitfield of Permissible State Transitions. 
 
 @details
+- The Permissible State transition graph indicates all possible State transitions that can be carried out by the FSM.
+- This Permissible State transition graph is represented as a bitfield in the 'permissibleStateTransition_u64' structure element.
+- In the Permissible State Transition bitfield structure elememt, the status of specific bits (high / low) decide whether transition from one state can / cannot happen.
+- Setting the State Transition permission introduces dynamism to the scope of the States in which FSM operates.
+- This operation of setting the necessary permission bits modifies the ability of the FSM from transitioning from one state to another state.
 
 @input
+- The State of the FSM in which the FSM exists ; existing State.
+- The State of the FSM to which permission of transition needs to be granted / denied ; destination State.
+- The nature of the transition permsission that needs to be set,
+- - 1 = Transition from Existing State to Destination State is to be Granted.
+- - 0 = Transition from Existing State to Destination State is to be Denied.
 
 @output
+- Return type that indicating the success / failure of the API.
+- Modifying the Permissible State transtion graph bitfield structure element.
 
 */
-uint8_t fsmUtilSetStateTransitionPermission(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, uint8_t aPermissionStatus_u8);
+uint8_t fsmUtilSetStateTransitionPermission_u8(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, uint8_t aPermissionStatus_u8);
 
 /*
 @brief
+Get the nature of the State Transition Permission, from the Permissible State Transition graph bitfield strcuture element, from Existing State to Destination State.
 
 @details
+- The Permissible State transition graph indicates all possible State transitions that can be carried out by the FSM.
+- This Permissible State transition graph is represented as a bitfield in the 'permissibleStateTransition_u64' structure element.
+- In the Permissible State Transition bitfield structure elememt, the status of specific bits (high / low) decide whether transition from one state can / cannot happen.
+- Fetching the State transition permission provides an outline of the scope in which the FSM operates.
+- This operation of fetching the necessary permission bits tells whether the FSM grants / denied state transition from one state to another state.
 
 @input
+- The State of the FSM in which the FSM exists ; existing State.
+- The State of the FSM of which permission of transition needs to be polled ; destination State.
+- The nature of the transition permsission that exists,
+- - 1 = Transition from Existing State to Destination State is Granted.
+- - 0 = Transition from Existing State to Destination State is Denied.
 
 @output
+- Return type that indicating the success / failure of the API.
+- Fetching the Permissible State transtion graph bitfield structure element.
 
 */
 uint8_t fsmUtilGetStateTransitionPermission(uint8_t aFromStateNum_u8, uint8_t aToStateNum_u8, uint8_t * aPermissionStatus_u8);
@@ -262,7 +300,7 @@ uint8_t fsmUtilGetStateEvaluatorReturnStatus(uint8_t aFromStateNum_u8, uint8_t a
 @output
 
 */
-uint8_t fsmUtilGetNumberOfStates_u8(uint8_t * aNumberOfStates_u8);
+void fsmUtilClearAllStateEvaluatorReturnStatus_u8(void);
 
 /*
 @brief
@@ -274,7 +312,7 @@ uint8_t fsmUtilGetNumberOfStates_u8(uint8_t * aNumberOfStates_u8);
 @output
 
 */
-uint8_t fsmUtilGetCurrentFsmState_u8(uint8_t * aCurrentState_u8);
+uint8_t fsmUtilityGetNumberOfStates_u8(uint8_t * aNumberOfStates_u8);
 
 /*
 @brief
@@ -286,9 +324,21 @@ uint8_t fsmUtilGetCurrentFsmState_u8(uint8_t * aCurrentState_u8);
 @output
 
 */
-void fsmUtilFullResetFsm(void);
+uint8_t fsmUtilityGetCurrentFsmState_u8(uint8_t * aCurrentState_u8);
 
+/*
+@brief
 
+@details
+
+@input
+
+@output
+
+*/
+void fsmUtilDestroyFsm(void);
+
+void fsmProcess(void);
 /*
 
 For running the FSM
